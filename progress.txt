@@ -17,14 +17,19 @@ Done
 
 In progress
 -----------
-* Main agent is preparing the final clean launch and end-to-end retest.
+* None. The MVP and final verification are complete as reported by the main agent.
 
-Left
-----
-* Confirm the app starts cleanly from its documented command and repeat the final functional checks.
-* Create the local git commit and report its result.
-* Record final evidence, limitations, and delivery status.
+Final verification and delivery
+-------------------------------
+* Clean launch passed direct, spoofed-header, and trusted-proxy HTTP cases; live TCP capture; enrichment status; PCAP import; malformed PCAP rejection; and UI response.
+* Local Git repository was initialized and committed as 6810535. A neutral local commit identity was used because no user Git identity was configured.
+
+Remaining limitations
+---------------------
+* PROXY protocol and STUN metadata are outside this MVP.
+* Local enrichment/provider data needs a refresh procedure to stay current.
+* Capture-group permission may require a new user login before it takes effect in every session.
 
 Update rule
 -----------
-This file tracks milestones reported by the main agent. Final clean-launch checks and the git commit remain pending until reported.
+This file tracks milestones reported by the main agent. No additional work is pending for this MVP beyond the limitations above.
