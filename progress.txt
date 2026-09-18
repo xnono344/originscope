@@ -12,8 +12,9 @@ Done
 * PCAPNG import passed with 2 connection starts.
 * DB-IP ASN/country data and Cloudflare/Tor local lists were downloaded for enrichment/classification.
 * Main agent captured a screenshot and checked the UI and filters in desktop and mobile browser views.
-* Four unit tests passed.
-* README.md is complete, per the main agent's milestone report.
+* Added Linux ss -tunp process/socket attribution, an app filter, and details that explain why a caller number or physical location cannot be derived from packets.
+* Five unit tests passed after the process attribution update. Desktop and mobile browser checks passed.
+* README.md is complete and includes the process attribution and identity limitations, per the main agent's milestone report.
 
 In progress
 -----------
@@ -22,13 +23,15 @@ In progress
 Final verification and delivery
 -------------------------------
 * Clean launch passed direct, spoofed-header, and trusted-proxy HTTP cases; live TCP capture; enrichment status; PCAP import; malformed PCAP rejection; and UI response.
+* Follow-up runtime checks passed direct, spoofed-header, trusted-proxy, live capture, and application socket cases.
 * Local Git repository was initialized and committed as 6810535. A neutral local commit identity was used because no user Git identity was configured.
 
 Remaining limitations
 ---------------------
 * PROXY protocol and STUN metadata are outside this MVP.
 * Local enrichment/provider data needs a refresh procedure to stay current.
-* Capture-group permission may require a new user login before it takes effect in every session.
+* Capture-group membership must be configured; the app activates it only for TShark when the current session has not refreshed.
+* WhatsApp contact identity and physical location are unavailable from network metadata. No WhatsApp process was present for a WhatsApp-specific runtime test.
 
 Update rule
 -----------

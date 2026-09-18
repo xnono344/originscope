@@ -3,6 +3,7 @@
 
 import argparse
 import datetime as dt
+import grp
 import http.client
 import ipaddress
 import json
@@ -10,6 +11,8 @@ import os
 from pathlib import Path
 import queue
 import re
+import pwd
+import shlex
 import shutil
 import socket
 import subprocess
@@ -274,6 +277,18 @@ def tshark_command(interface=None, pcap=None):
     return cmd
 
 
+def capture_launch_command(cmd):
+    """Activate only dumpcap's group, preserving process visibility for ss."""
+    try:
+        group = grp.getgrnam("wireshark")
+        user = pwd.getpwuid(os.getuid()).pw_name
+        if group.gr_gid not in os.getgroups() and user in group.gr_mem and shutil.which("sg"):
+            return ["sg", "wireshark", "-c", shlex.join(cmd)]
+    except (KeyError, OSError):
+        pass
+    return cmd
+
+
 def capture_loop(app):
     if not app.config["capture"]["enabled"]:
         app.status["capture"] = "disabled by config"
@@ -284,7 +299,7 @@ def capture_loop(app):
         return
     cmd = tshark_command(app.config["interface"])
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+        proc = subprocess.Popen(capture_launch_command(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
         app.capture_proc = proc
         app.status["capture"] = "starting tshark"
         for line in proc.stdout:
@@ -302,7 +317,56 @@ def capture_loop(app):
 
 def split_endpoint(value):
     host, _, port = value.rpartition(":")
-    return ip_value(host.strip("[]")), int(port) if port.isdigit() else None
+    return ip_value(host.strip("[]").split("%", 1)[0]), int(port) if port.isdigit() else None
+
+
+def parse_app_socket(row):
+    """Read one Linux ss -H -tunp row; missing process ownership stays unknown."""
+    cells = row.split()
+    if len(cells) < 7 or cells[0] not in ("tcp", "udp"):
+        return None
+    match = re.search(r'users:\(\("([^"]+)",pid=(\d+),fd=\d+\)', row)
+    if not match:
+        return None
+    local_ip, local_port = split_endpoint(cells[4])
+    remote_ip, remote_port = split_endpoint(cells[5])
+    if not all((local_ip, local_port, remote_ip, remote_port)):
+        return None
+    return {"transport": cells[0].upper(), "source_ip": remote_ip, "source_port": remote_port,
+            "destination_ip": local_ip, "destination_port": local_port,
+            "application": match.group(1), "process_id": int(match.group(2))}
+
+
+def app_socket_loop(app):
+    """Observe sockets owned by local processes; no message or caller inference."""
+    seen = set()
+    while True:
+        try:
+            output = subprocess.run(["ss", "-H", "-tunp"], capture_output=True, text=True, timeout=3, check=True).stdout
+            current = set()
+            for row in output.splitlines():
+                socket_info = parse_app_socket(row)
+                if not socket_info or socket_info["process_id"] == os.getpid():
+                    continue
+                key = (socket_info["transport"], socket_info["source_ip"], socket_info["source_port"],
+                       socket_info["destination_ip"], socket_info["destination_port"], socket_info["process_id"])
+                current.add(key)
+                if key in seen:
+                    continue
+                peer = socket_info["source_ip"]
+                process = socket_info["application"]
+                app.observe({"timestamp": dt.datetime.now(dt.timezone.utc).isoformat(), **socket_info,
+                             "protocol": PORT_NAMES.get(socket_info["source_port"], socket_info["transport"])},
+                            "APP SOCKET", {"classification": "APP SOCKET", "direction": "LOCAL PROCESS SOCKET",
+                                           "caller_number": None, "caller_location": None,
+                                           "topology": [f"{process} (local)", f"Network peer {peer}"],
+                                           "evidence": [f"Linux ss reports process {process} (PID {socket_info['process_id']}) owns this socket",
+                                                        f"Observed remote network endpoint: {peer}",
+                                                        "The socket does not expose the sender of an app call or message"]})
+            seen = current
+        except (OSError, subprocess.SubprocessError):
+            pass
+        time.sleep(1)
 
 
 def ss_loop(app):
@@ -502,6 +566,7 @@ def main():
                serve(DemoHandler, config["demo"]["host"], config["demo"]["port"]),
                serve(ProxyHandler, config["demo"]["host"], config["demo"]["proxy_port"])]
     threading.Thread(target=capture_loop, args=(app,), daemon=True).start()
+    threading.Thread(target=app_socket_loop, args=(app,), daemon=True).start()
     print(f"OriginScope UI: http://{config['ui']['host']}:{config['ui']['port']}", flush=True)
     print(f"Demo direct: http://{config['demo']['host']}:{config['demo']['port']}", flush=True)
     print(f"Demo proxy:  http://{config['demo']['host']}:{config['demo']['proxy_port']}", flush=True)

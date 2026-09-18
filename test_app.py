@@ -1,7 +1,7 @@
 import ipaddress
 import unittest
 
-from app import parse_tshark, trust_analysis
+from app import parse_app_socket, parse_tshark, trust_analysis
 
 
 class AttributionTest(unittest.TestCase):
@@ -29,6 +29,13 @@ class AttributionTest(unittest.TestCase):
         values[-1] = "True"
         self.assertIsNone(parse_tshark("\t".join(values)))
         self.assertIsNone(parse_tshark("garbage"))
+
+    def test_app_socket_requires_local_process_evidence(self):
+        row = 'tcp ESTAB 0 0 192.168.1.31:43058 34.54.185.247:443 users:(("firefox",pid=4393,fd=151))'
+        parsed = parse_app_socket(row)
+        self.assertEqual((parsed["application"], parsed["source_ip"], parsed["process_id"]),
+                         ("firefox", "34.54.185.247", 4393))
+        self.assertIsNone(parse_app_socket(row.split(" users:")[0]))
 
 
 if __name__ == "__main__":

@@ -11,12 +11,11 @@ Linux with Python 3.11+, `tshark`, and capture permission is recommended. Fedora
 ```sh
 sudo dnf install wireshark-cli python3
 sudo usermod -aG wireshark "$USER"
-# Log out and back in once, or use sg as shown below.
 ./scripts/setup.sh
 ./originscope
 ```
 
-On the first run after joining the group, use `sg wireshark -c './originscope'` if you have not logged out yet. The app itself runs as your user. Fedora's Wireshark package grants the narrow network capabilities to `dumpcap`, which is accessible only to the `wireshark` group. See [Wireshark's capture permission guide](https://wiki.wireshark.org/capturesetup/captureprivileges).
+The app itself runs in your normal user session. If new `wireshark` group membership has not reached that session yet, OriginScope activates the group only for its TShark capture child. Fedora's Wireshark package grants the narrow network capabilities to `dumpcap`, which is accessible only to the `wireshark` group. See [Wireshark's capture permission guide](https://wiki.wireshark.org/capturesetup/captureprivileges).
 
 Open **http://127.0.0.1:18765**. Run from the project directory. `./originscope` is the single startup command after installation. Stop it with Ctrl+C.
 
@@ -36,14 +35,21 @@ curl -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:18081/via-proxy
 
 The first is **DIRECT** with observed TCP peer `127.0.0.1`. The second is **UNTRUSTED HEADER**: `203.0.113.9` is displayed as a claim and never accepted as the client. The third is **PROXIED**: the built-in proxy removes supplied attribution headers, forwards the request from `127.0.0.2`, and reports its observed client as `127.0.0.1`. Only `127.0.0.2/32` is trusted by default. This separate loopback address keeps a direct `127.0.0.1` request from accidentally becoming trusted.
 
-The test server returns a JSON explanation and adds the event to the live UI. Click a row to see the observed source, reported headers, accepted client if any, topology, confidence, and evidence. Use the search, protocol, source classification, ASN, country, and destination port filters. Use **Import PCAP** to load a `.pcap` or `.pcapng` up to 50 MiB; imported connection starts use the same parser and enrichment pipeline.
+The test server returns a JSON explanation and adds the event to the live UI. Click a row to see the observed source, reported headers, accepted client if any, topology, confidence, and evidence. Use the search, protocol, application, source classification, ASN, country, and destination port filters. Use **Import PCAP** to load a `.pcap` or `.pcapng` up to 50 MiB; imported connection starts use the same parser and enrichment pipeline.
+
+## Application sockets and calls
+
+OriginScope also polls Linux `ss -tunp` to show **which local process owns an active TCP or connected UDP socket** when the OS exposes that owner. Filter by app name or select **APP SOCKET**. The detail panel shows the process name/PID, local socket, remote network endpoint, and an estimated country for that endpoint when the local database has a match. A web app usually appears as `firefox` or another browser process, not as its own tab. A phone's app identity is not available from packets observed on this PC; sockets owned by other users or hidden by OS permissions may also lack a process name.
+
+For WhatsApp or another messaging app, the remote address may be an app server, CDN, or call relay. Packet metadata does not contain a reliable caller phone number or true physical location. OriginScope explicitly shows those as **Unavailable from packets**. A number visible in an app's own UI would require that app to provide an authorized event or export; it cannot be inferred universally from network traffic. [WhatsApp documents end-to-end encryption](https://faq.whatsapp.com/820124435853543/) and [call relaying](https://faq.whatsapp.com/2635108359972899/), which are concrete reasons for this limit. The country shown is about the network endpoint's IP allocation, not the person who contacted you.
 
 ## Architecture and reused components
 
 ```text
 Network interface ── TShark / dumpcap ── field output ──┐
 PCAP / PCAPNG ──────── TShark ─────────── field output ──┼─ normalize + deduplicate
-HTTP demo ─────────── Python HTTP server ────────────────┘          │
+HTTP demo ─────────── Python HTTP server ────────────────┤          │
+Local app sockets ─── Linux ss -tunp ────────────────────┘          │
                                                                   ├─ trust rules + evidence
                                                                   ├─ local DNS / MMDB / lists
                                                                   └─ bounded memory → SSE → browser
@@ -72,7 +78,7 @@ The observed source is the peer visible at this host; it is always shown separat
 - Cloudflare publishes its [IPv4](https://www.cloudflare.com/ips-v4) and [IPv6](https://www.cloudflare.com/ips-v6) ranges. The [Tor Project bulk exit list](https://check.torproject.org/torbulkexitlist) is a snapshot and does not include every possible relay or destination-specific exit policy. Refresh these files regularly.
 - No packet bodies, cookies, credentials, TLS plaintext, or HTTP message bodies are stored by OriginScope. TShark inspects traffic transiently to report metadata. Imported PCAP files can contain sensitive payloads supplied by the operator; OriginScope holds the uploaded bytes in a temporary file only while TShark reads them, then deletes it. Do not import captures you are not authorized to analyze.
 - The UI and test servers bind to `127.0.0.1` by default. Changing that exposes unauthenticated local endpoints; add your own access control before binding publicly.
-- One event represents a TCP connection start or first UDP datagram in a 30-second flow window. This keeps the UI usable under high packet rates; it is not a packet counter. The in-memory history is capped at 10,000 observations and disappears on restart.
+- One capture event represents a TCP connection start or first UDP datagram in a 30-second flow window. App socket events represent active sockets discovered by one-second polling, which can miss short connections. These are not packet or call counters. The in-memory history is capped at 10,000 observations and disappears on restart.
 - Reverse DNS can be absent or misleading. The lookup worker has a two-second timeout and never blocks capture. Offline lists and databases keep ASN/country/Tor/CDN enrichment available without an API request for each observed IP.
 - PROXY protocol v1/v2 ingestion, STUN/TURN/ICE analysis, TLS interception, VPN detection, and relay deanonymization are outside this MVP. The UI reports **UNKNOWN** when evidence is insufficient.
 
@@ -83,7 +89,7 @@ The observed source is the peer visible at this host; it is always shown separat
 curl -fsS http://127.0.0.1:18765/api/status
 ```
 
-The included checks cover untrusted headers, trusted proxy hop selection, Cloudflare header gating, and malformed TShark records. For manual verification, run the three demo requests above, check the live table and detail panel, and import a PCAP captured on an interface you may monitor. A screenshot of the tested proxy detail view is included above.
+The included checks cover untrusted headers, trusted proxy hop selection, Cloudflare header gating, malformed TShark records, and app socket parsing. For manual verification, run the three demo requests above, check the live table and detail panel, filter to **APP SOCKET**, and import a PCAP captured on an interface you may monitor. The screenshot above shows a tested application socket and the explicit caller-identity limits.
 
 ## Project files
 
