@@ -1,0 +1,22 @@
+interface: any
+capture:
+  enabled: true
+trusted_proxies:
+  - 127.0.0.2/32
+demo:
+  host: 127.0.0.1
+  port: 18080
+  proxy_port: 18081
+ui:
+  host: 127.0.0.1
+  port: 18765
+enrichment:
+  enabled: true
+  reverse_dns: true
+storage:
+  max_connections: 10000
+data:
+  asn_db: data/dbip-asn-lite.mmdb
+  country_db: data/dbip-country-lite.mmdb
+  cloudflare_ranges: data/cloudflare-ranges.txt
+  tor_exits: data/tor-exits.txt

@@ -1,0 +1,30 @@
+OriginScope progress
+====================
+
+Done
+----
+* Read the supplied product brief.
+* Wrote a practical implementation and verification plan in readme.txt.
+* Main agent built the Python backend (app.py), editable configuration, launcher, dark web UI, TShark capture adapter, ss fallback, and local HTTP demo/proxy.
+* Main agent installed wireshark-cli and configured wireshark group capture permission.
+* Live TShark capture starts. After fixing a high-volume UDP event flood with 30-second flow deduplication and correcting TCP SYN parsing, a rerun produced 21 events, including 4 captured local TCP starts.
+* Local HTTP checks passed for a direct request, a spoofed X-Forwarded-For header from an untrusted peer, and a trusted local proxy request.
+* PCAPNG import passed with 2 connection starts.
+* DB-IP ASN/country data and Cloudflare/Tor local lists were downloaded for enrichment/classification.
+* Main agent captured a screenshot and checked the UI and filters in desktop and mobile browser views.
+* Four unit tests passed.
+* README.md is complete, per the main agent's milestone report.
+
+In progress
+-----------
+* Main agent is preparing the final clean launch and end-to-end retest.
+
+Left
+----
+* Confirm the app starts cleanly from its documented command and repeat the final functional checks.
+* Create the local git commit and report its result.
+* Record final evidence, limitations, and delivery status.
+
+Update rule
+-----------
+This file tracks milestones reported by the main agent. Final clean-launch checks and the git commit remain pending until reported.
